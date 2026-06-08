@@ -2,7 +2,7 @@
     <nav class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <a href="/" class="flex items-center gap-2">
             @include('partials.logo')
-            <span class="font-bold text-4xl text-gray-900">SFM</span>
+            <span class="font-bold text-2xl text-gray-900">SFM</span>
         </a>
 
         @guest
@@ -44,8 +44,11 @@
                         </a>
                         @if (auth()->user()->isAdmin())
                             <a href="/panel/admin/perfil" class="block px-4 py-2 hover:bg-gray-50 text-sm">Mi perfil</a>
+                            <a href="/panel/admin/clientes" class="block px-4 py-2 hover:bg-gray-50 text-sm">Clientes</a>
+                            <a href="/panel/admin/reportes" class="block px-4 py-2 hover:bg-gray-50 text-sm">Reportes</a>
                         @elseif (auth()->user()->isCliente())
                             <a href="/panel/cliente/perfil" class="block px-4 py-2 hover:bg-gray-50 text-sm">Mi perfil</a>
+                            <a href="/panel/cliente/resenas" class="block px-4 py-2 hover:bg-gray-50 text-sm">Reseñas</a>
                             <a href="/panel/cliente/mensajes" class="block px-4 py-2 hover:bg-gray-50 text-sm flex items-center justify-between">
                                 Mensajería
                                 @if (($mensajesNoLeidos ?? 0) > 0)

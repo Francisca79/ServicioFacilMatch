@@ -248,13 +248,15 @@ class SfmSeeder extends Seeder
 
         $admin = User::where('tipo_usuario', 'admin')->first();
 
+        $zonas = \App\Support\ZonasSanMiguel::todas();
         $profesionales = collect();
-        foreach ($perfiles as $perfil) {
+        foreach ($perfiles as $i => $perfil) {
             $base = $perfil['precio_estimado'];
             $profesionales->push(Profesional::create(array_merge($perfil, [
                 'calificacion' => 0,
                 'precio_min' => $base,
                 'precio_max' => round($base * 2.5, 2),
+                'zona' => $zonas[$i % count($zonas)],
             ])));
         }
 

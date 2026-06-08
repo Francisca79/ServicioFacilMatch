@@ -56,6 +56,31 @@
         </div>
 
         <div class="bg-white rounded-xl border shadow-sm p-6">
+            <h2 class="text-lg font-bold mb-1">Ingresos (efectivo)</h2>
+            <p class="text-3xl font-bold text-green-600 mb-4">${{ number_format($totalIngresos, 0) }}</p>
+            <p class="text-xs text-gray-500 mb-4">Solo cobros que tú confirmaste. Pagos en línea no disponibles.</p>
+            @if ($ingresosPorMes->count())
+                <div class="space-y-2">
+                    @php $maxMes = $ingresosPorMes->max() ?: 1; @endphp
+                    @foreach ($ingresosPorMes as $mes => $monto)
+                        <div class="flex items-center gap-2 text-sm">
+                            <span class="w-16 text-gray-500 text-xs">{{ $mes }}</span>
+                            <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                                <div class="bg-green-500 h-full rounded-full" style="width: {{ round(($monto / $maxMes) * 100) }}%"></div>
+                            </div>
+                            <span class="w-16 text-right font-medium">${{ number_format($monto, 0) }}</span>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <p class="text-gray-500 text-sm">Aún no registras cobros. Confírmalos en Mensajería cuando recibas el pago.</p>
+            @endif
+            <a href="/panel/profesional/mensajes" class="text-blue-600 text-sm mt-4 inline-block hover:underline">Ir a mensajería →</a>
+        </div>
+    </div>
+
+    <div class="grid md:grid-cols-1 gap-6">
+        <div class="bg-white rounded-xl border shadow-sm p-6">
             <h2 class="text-lg font-bold mb-4">Mensajes de contacto recientes</h2>
             @forelse ($contactosPendientes as $c)
                 <div class="border-b py-3 last:border-0">

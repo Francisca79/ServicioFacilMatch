@@ -26,6 +26,7 @@ class UpdateProfesionalProfileRequest extends FormRequest
             'experiencia' => 'nullable|string|max:100',
             'modalidad' => 'nullable|string|max:50',
             'disponibilidad' => 'nullable|string|max:100',
+            'zona' => 'nullable|string|max:80',
             'foto_archivo' => 'nullable|image|max:2048',
         ];
     }

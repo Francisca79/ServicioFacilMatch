@@ -31,7 +31,10 @@
             </button>
         </form>
 
-        <p class="text-center mt-6 text-sm text-gray-600">
+        <p class="text-center mt-4 text-sm">
+            <a href="/olvide-contrasena" class="text-blue-600 hover:underline">¿Olvidaste tu contraseña?</a>
+        </p>
+        <p class="text-center mt-4 text-sm text-gray-600">
             ¿No tienes cuenta? <a href="/registro" class="text-blue-600 font-semibold">Regístrate</a>
         </p>
     </div>

@@ -28,11 +28,16 @@ class ProfesionalController extends Controller
             });
         }
 
+        if ($request->filled('zona')) {
+            $query->where('zona', $request->zona);
+        }
+
         $profesionales = $query->get();
         $categorias = Categoria::orderBy('nombre_categoria')->pluck('nombre_categoria');
+        $zonas = \App\Support\ZonasSanMiguel::todas();
         $puedeContratar = auth()->check() && auth()->user()->isCliente();
 
-        return view('profesionales.publico', compact('profesionales', 'categorias', 'puedeContratar'));
+        return view('profesionales.publico', compact('profesionales', 'categorias', 'zonas', 'puedeContratar'));
     }
 
     public function show(int $id)

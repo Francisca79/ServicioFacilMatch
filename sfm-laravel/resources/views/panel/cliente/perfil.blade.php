@@ -27,8 +27,7 @@
             <input name="telefono" value="{{ old('telefono', $user->telefono) }}" class="w-full border rounded-lg px-4 py-2">
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Foto de perfil</label>
-            <input type="file" name="foto_archivo" accept="image/*" class="w-full border rounded-lg px-4 py-2">
+            @include('partials.foto-input')
         </div>
 
         <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">Guardar perfil</button>

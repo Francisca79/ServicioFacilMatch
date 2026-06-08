@@ -26,6 +26,10 @@
                 <span class="absolute top-4 right-4 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{{ $mensajesNoLeidos }}</span>
             @endif
         </a>
+        <a href="/panel/cliente/resenas" class="bg-white border rounded-xl p-6 shadow-sm hover:shadow-md transition">
+            <div class="text-3xl mb-3">⭐</div>
+            <h3 class="font-bold text-lg">Reseñas</h3>
+        </a>
         <a href="/panel/cliente/perfil" class="bg-white border rounded-xl p-6 shadow-sm hover:shadow-md transition">
             <div class="text-3xl mb-3">👤</div>
             <h3 class="font-bold text-lg">Mi Perfil</h3>

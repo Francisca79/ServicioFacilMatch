@@ -67,9 +67,7 @@
                     class="border border-gray-300 rounded-xl px-4 py-3 outline-none" />
 
                 <div class="md:col-span-2">
-                    <label class="block text-sm font-medium mb-1">Foto de perfil</label>
-                    <input type="file" name="foto_archivo" accept="image/*"
-                        class="border border-gray-300 rounded-xl px-4 py-3 outline-none w-full" />
+                    @include('partials.foto-input')
                 </div>
             </div>
 

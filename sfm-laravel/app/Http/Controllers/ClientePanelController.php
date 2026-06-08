@@ -22,7 +22,11 @@ use App\Models\Profesional;
 
 use App\Models\Resena;
 
+use App\Models\ServicioAdquirido;
+
 use App\Models\User;
+
+use App\Services\NotificacionService;
 
 use Illuminate\Http\Request;
 
@@ -152,11 +156,20 @@ class ClientePanelController extends Controller
 
         $misResenas = Resena::with('profesional.categoria')->where('user_id', $user->id)->latest()->get();
 
-        $verificados = $user->serviciosAdquiridos()->where('verificado', true)->pluck('profesional_id')->toArray();
+        $verificados = $profesionales
+            ->filter(fn ($p) => $user->puedeResenarProfesional($p->id))
+            ->pluck('id')
+            ->toArray();
+
+        $servicios = $user->serviciosAdquiridos()
+            ->with('profesional.categoria')
+            ->where('estado_solicitud', 'aceptada')
+            ->orderByDesc('updated_at')
+            ->get();
 
 
 
-        return view('panel.cliente.resenas', compact('profesionales', 'misResenas', 'verificados'));
+        return view('panel.cliente.resenas', compact('profesionales', 'misResenas', 'verificados', 'servicios'));
 
     }
 
@@ -174,7 +187,7 @@ class ClientePanelController extends Controller
 
             return back()->withErrors([
 
-                'profesional_id' => 'Solo puedes reseñar profesionales cuyo servicio fue verificado por el administrador.',
+                'profesional_id' => 'Solo puedes reseñar cuando el profesional confirme el cobro o tengas historial pagado con él.',
 
             ]);
 
@@ -196,7 +209,17 @@ class ClientePanelController extends Controller
 
 
 
-        Profesional::find($request->profesional_id)?->actualizarCalificacion();
+        $prof = Profesional::with('user')->find($request->profesional_id);
+
+        $prof?->actualizarCalificacion();
+
+        if ($prof?->user) {
+            NotificacionService::enviar(
+                $prof->user,
+                'Nueva reseña en tu perfil',
+                "{$user->name} publicó una reseña de {$request->calificacion} estrellas."
+            );
+        }
 
 
 
@@ -260,9 +283,21 @@ class ClientePanelController extends Controller
 
         $profesionalId = $request->get('profesional');
 
+        $conversaciones = Mensaje::agruparConversaciones($mensajes, $user->id);
 
+        $serviciosPorConversacion = collect();
+        foreach ($conversaciones as $conv) {
+            if ($conv['profesional_id']) {
+                $serviciosPorConversacion[$conv['clave']] = ServicioAdquirido::paraConversacion(
+                    $user->id,
+                    $conv['profesional_id']
+                );
+            }
+        }
 
-        return view('panel.cliente.mensajes', compact('mensajes', 'profesionales', 'profesionalId', 'mensajesNoLeidos'));
+        return view('panel.cliente.mensajes', compact(
+            'conversaciones', 'profesionales', 'profesionalId', 'mensajesNoLeidos', 'serviciosPorConversacion'
+        ));
 
     }
 
@@ -282,9 +317,27 @@ class ClientePanelController extends Controller
 
 
 
+        if ($request->profesional_id && str_starts_with(trim($request->asunto ?? ''), 'Re:')) {
+            $profesional = Profesional::findOrFail($request->profesional_id);
+            $servicio = ServicioAdquirido::paraConversacion($user->id, $profesional->id);
+
+            if (! $servicio || ! $servicio->permiteChat()) {
+                $motivo = $servicio?->estado_solicitud === 'denegada'
+                    ? 'Tu solicitud fue rechazada. Envía una nueva solicitud de servicio para contactar al profesional.'
+                    : 'Debes esperar a que el profesional acepte tu solicitud antes de continuar el chat.';
+
+                return back()->withErrors(['cuerpo' => $motivo]);
+            }
+        }
+
         if ($request->profesional_id && ! str_starts_with(trim($request->asunto ?? ''), 'Re:')) {
 
             $profesional = Profesional::with('user')->findOrFail($request->profesional_id);
+
+            $servicioExistente = ServicioAdquirido::paraConversacion($user->id, $profesional->id);
+            if ($servicioExistente?->estado_solicitud === 'pendiente') {
+                return back()->withErrors(['cuerpo' => 'Ya tienes una solicitud pendiente con este profesional. Espera su respuesta.']);
+            }
 
 
 
@@ -322,7 +375,7 @@ class ClientePanelController extends Controller
 
 
 
-        Mensaje::create([
+        $mensaje = Mensaje::create([
 
             'remitente_id' => $user->id,
 
@@ -340,6 +393,32 @@ class ClientePanelController extends Controller
 
 
 
+        if ($tipo === 'solicitud' && $profesionalId) {
+            ServicioAdquirido::updateOrCreate(
+                ['user_id' => $user->id, 'profesional_id' => $profesionalId],
+                [
+                    'estado_solicitud' => 'pendiente',
+                    'verificado' => false,
+                    'verificado_por' => null,
+                    'mensaje_id' => $mensaje->id,
+                    'estado_pago' => 'pendiente',
+                    'notas' => 'Solicitud enviada por mensajería',
+                ]
+            );
+        }
+
+
+
+        if ($destinatario = User::find($destinatarioId)) {
+            NotificacionService::enviar(
+                $destinatario,
+                'Nuevo mensaje en SFM',
+                "De: {$user->name}\n\n{$request->cuerpo}"
+            );
+        }
+
+
+
         return back()->with('success', 'Mensaje enviado correctamente.');
 
     }
@@ -351,6 +430,10 @@ class ClientePanelController extends Controller
 
         if ($mensaje->remitente_id !== $userId && $mensaje->destinatario_id !== $userId) {
             abort(403, 'No puedes eliminar este mensaje.');
+        }
+
+        if ($mensaje->tipo === 'advertencia') {
+            return back()->withErrors(['error' => 'No puedes eliminar advertencias del administrador.']);
         }
 
         $mensaje->delete();

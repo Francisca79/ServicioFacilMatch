@@ -67,8 +67,7 @@
                 <input name="disponibilidad" value="{{ old('disponibilidad') }}" placeholder="Ej. Lunes a Viernes" class="w-full border rounded-lg px-4 py-2 outline-none" />
             </div>
             <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">Subir foto</label>
-                <input type="file" name="foto_archivo" accept="image/*" class="w-full border rounded-lg px-4 py-2" />
+                @include('partials.foto-input')
             </div>
         </div>
 

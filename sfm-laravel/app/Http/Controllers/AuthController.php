@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
@@ -18,6 +19,14 @@ class AuthController extends Controller
             'email' => $request->correo,
             'password' => $request->contrasena,
         ];
+
+        $usuario = User::where('email', $request->correo)->first();
+
+        if ($usuario?->estaBloqueado()) {
+            return back()->withErrors([
+                'correo' => 'Tu cuenta está bloqueada. Contacta al administrador.',
+            ])->onlyInput('correo');
+        }
 
         if (Auth::attempt($credentials, $request->boolean('recordar'))) {
             $request->session()->regenerate();

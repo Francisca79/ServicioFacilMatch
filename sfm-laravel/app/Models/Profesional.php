@@ -26,6 +26,7 @@ class Profesional extends Model
         'disponibilidad',
         'foto',
         'calificacion',
+        'zona',
     ];
 
     protected $appends = ['nombre_categoria', 'descripcion_servicio', 'id_profesional'];

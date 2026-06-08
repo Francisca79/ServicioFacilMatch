@@ -23,6 +23,7 @@ class User extends Authenticatable
         'ciudad',
         'foto',
         'tipo_usuario',
+        'bloqueado',
     ];
 
     protected $hidden = [
@@ -35,6 +36,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'bloqueado' => 'boolean',
         ];
     }
 
@@ -73,11 +75,40 @@ class User extends Authenticatable
         return $this->hasMany(ResenaCliente::class, 'cliente_id');
     }
 
+    public function advertenciasRecibidas(): HasMany
+    {
+        return $this->hasMany(Mensaje::class, 'destinatario_id')->where('tipo', 'advertencia');
+    }
+
+    public function estaBloqueado(): bool
+    {
+        return (bool) $this->bloqueado;
+    }
+
     public function puedeResenarProfesional(int $profesionalId): bool
+    {
+        if ($this->resenas()->where('profesional_id', $profesionalId)->exists()) {
+            return false;
+        }
+
+        if (! $this->serviciosAdquiridos()
+            ->where('profesional_id', $profesionalId)
+            ->where('estado_solicitud', 'aceptada')
+            ->exists()) {
+            return false;
+        }
+
+        return $this->serviciosAdquiridos()
+            ->where('profesional_id', $profesionalId)
+            ->where('profesional_confirmo_cobro', true)
+            ->exists();
+    }
+
+    public function tieneHistorialConProfesional(int $profesionalId): bool
     {
         return $this->serviciosAdquiridos()
             ->where('profesional_id', $profesionalId)
-            ->where('verificado', true)
+            ->where('profesional_confirmo_cobro', true)
             ->exists();
     }
 

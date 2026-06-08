@@ -59,6 +59,15 @@
                 <p class="text-xs text-gray-500 mt-1">SFM solo opera en San Miguel, El Salvador.</p>
             </div>
             <div>
+                <label class="block text-sm font-medium mb-1">Zona de San Miguel</label>
+                <select name="zona" class="w-full border rounded-lg px-4 py-2 outline-none">
+                    <option value="">Seleccione zona...</option>
+                    @foreach (\App\Support\ZonasSanMiguel::todas() as $z)
+                        <option value="{{ $z }}" @selected(old('zona', $profesional->zona ?? '') == $z)>{{ $z }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
                 <label class="block text-sm font-medium mb-1">Experiencia</label>
                 <input name="experiencia" value="{{ old('experiencia', $profesional->experiencia) }}"
                     class="w-full border rounded-lg px-4 py-2 outline-none" />
@@ -78,8 +87,7 @@
                     class="w-full border rounded-lg px-4 py-2 outline-none" />
             </div>
             <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">Subir foto (archivo)</label>
-                <input type="file" name="foto_archivo" accept="image/*" class="w-full border rounded-lg px-4 py-2" />
+                @include('partials.foto-input')
                 @if ($profesional->foto)
                     <img src="{{ $profesional->foto_url }}" class="w-20 h-20 rounded-full mt-2 object-cover" alt="">
                 @endif

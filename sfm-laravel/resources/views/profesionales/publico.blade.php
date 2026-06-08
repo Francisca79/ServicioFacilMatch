@@ -8,13 +8,19 @@
         <h1 class="text-4xl font-extrabold mb-2">Profesionales</h1>
         <p class="text-gray-600 mb-8">Explora perfiles, reseñas y rangos de precio por servicio.</p>
 
-        <form method="GET" class="grid md:grid-cols-3 gap-4 mb-8">
+        <form method="GET" class="grid md:grid-cols-4 gap-4 mb-8">
             <input type="text" name="buscar" value="{{ request('buscar') }}" placeholder="Buscar..."
                 class="border rounded-lg px-4 py-3 bg-white">
             <select name="categoria" class="border rounded-lg px-4 py-3 bg-white">
                 <option value="">Todas las categorías</option>
                 @foreach ($categorias as $cat)
                     <option value="{{ $cat }}" @selected(request('categoria') === $cat)>{{ $cat }}</option>
+                @endforeach
+            </select>
+            <select name="zona" class="border rounded-lg px-4 py-3 bg-white">
+                <option value="">Todas las zonas</option>
+                @foreach ($zonas as $z)
+                    <option value="{{ $z }}" @selected(request('zona') === $z)>{{ $z }}</option>
                 @endforeach
             </select>
             <button type="submit" class="bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">Filtrar</button>

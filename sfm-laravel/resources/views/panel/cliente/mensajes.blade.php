@@ -14,12 +14,13 @@
 <p class="text-gray-600 mb-8">Contacta profesionales, envía solicitudes de servicio y responde conversaciones.</p>
 
 @include('partials.mensajeria', [
-    'mensajes' => $mensajes,
+    'conversaciones' => $conversaciones,
     'profesionales' => $profesionales,
     'postUrl' => '/panel/cliente/mensajes',
     'deleteUrl' => '/panel/cliente/mensajes',
     'esCliente' => true,
     'profesionalId' => $profesionalId,
     'mensajesNoLeidos' => $mensajesNoLeidos,
+    'serviciosPorConversacion' => $serviciosPorConversacion,
 ])
 @endsection

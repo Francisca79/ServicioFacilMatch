@@ -12,6 +12,7 @@ use App\Models\Resena;
 use App\Models\ResenaCliente;
 use App\Models\ServicioAdquirido;
 use App\Models\User;
+use App\Services\NotificacionService;
 use Illuminate\Http\Request;
 
 class AdminPanelController extends Controller
@@ -19,18 +20,33 @@ class AdminPanelController extends Controller
     public function index()
     {
         $stats = [
+            'clientes' => ['valor' => User::where('tipo_usuario', 'cliente')->count(), 'url' => '/panel/admin/clientes'],
             'usuarios' => ['valor' => User::count(), 'url' => '/panel/admin/usuarios'],
             'profesionales' => ['valor' => Profesional::count(), 'url' => '/panel/admin/profesionales'],
-            'resenas' => ['valor' => Resena::count(), 'url' => '/panel/admin/resenas'],
-            'contactos' => ['valor' => Contacto::count(), 'url' => '/panel/admin/contactos'],
-            'categorias' => ['valor' => Categoria::count(), 'url' => '/panel/admin/categorias'],
+            'reseñas' => ['valor' => Resena::count(), 'url' => '/panel/admin/resenas'],
+            'advertencias' => ['valor' => Mensaje::where('tipo', 'advertencia')->count(), 'url' => '/panel/admin/advertencias'],
+            'bloqueados' => ['valor' => User::where('bloqueado', true)->count(), 'url' => '/panel/admin/usuarios?filtro=bloqueados'],
         ];
 
         $profesionales = Profesional::with('categoria', 'user')->orderByDesc('calificacion')->take(8)->get();
         $resenas = Resena::with(['user', 'profesional.categoria'])->latest()->take(5)->get();
         $contactos = Contacto::with('profesional')->latest()->take(5)->get();
+        $advertenciasRecientes = Mensaje::with(['remitente', 'destinatario'])
+            ->where('tipo', 'advertencia')
+            ->latest()
+            ->take(5)
+            ->get();
+        $usuariosBloqueados = User::with('profesional')->where('bloqueado', true)->orderBy('name')->take(5)->get();
+        $pagosRecientes = ServicioAdquirido::with(['cliente', 'profesional'])
+            ->where('profesional_confirmo_cobro', true)
+            ->latest('fecha_cobro')
+            ->take(5)
+            ->get();
 
-        return view('panel.admin.index', compact('stats', 'profesionales', 'resenas', 'contactos'));
+        return view('panel.admin.index', compact(
+            'stats', 'profesionales', 'resenas', 'contactos',
+            'advertenciasRecientes', 'usuariosBloqueados', 'pagosRecientes'
+        ));
     }
 
     public function profesionales(Request $request)
@@ -72,12 +88,120 @@ class AdminPanelController extends Controller
         return view('panel.admin.resenas', compact('resenas'));
     }
 
-    public function usuarios()
+    public function usuarios(Request $request)
     {
-        $usuarios = User::with(['profesional', 'serviciosAdquiridos.profesional'])->orderBy('tipo_usuario')->get();
+        $query = User::with(['profesional', 'serviciosAdquiridos.profesional'])->orderBy('tipo_usuario')->orderBy('name');
+
+        if ($request->filtro === 'bloqueados') {
+            $query->where('bloqueado', true);
+        }
+
+        $usuarios = $query->get();
+
+        return view('panel.admin.usuarios', compact('usuarios'));
+    }
+
+    public function clientes()
+    {
+        $clientes = User::where('tipo_usuario', 'cliente')
+            ->with(['serviciosAdquiridos.profesional', 'advertenciasRecibidas' => fn ($q) => $q->latest()])
+            ->orderBy('name')
+            ->get();
         $profesionales = Profesional::orderBy('nombre')->get();
 
-        return view('panel.admin.usuarios', compact('usuarios', 'profesionales'));
+        return view('panel.admin.clientes', compact('clientes', 'profesionales'));
+    }
+
+    public function reportes()
+    {
+        $resumen = [
+            'total_usuarios' => ['valor' => User::count(), 'url' => '/panel/admin/usuarios'],
+            'clientes' => ['valor' => User::where('tipo_usuario', 'cliente')->count(), 'url' => '/panel/admin/clientes'],
+            'profesionales' => ['valor' => Profesional::count(), 'url' => '/panel/admin/profesionales'],
+            'reseñas' => ['valor' => Resena::count(), 'url' => '/panel/admin/resenas'],
+            'mensajes' => ['valor' => Mensaje::count(), 'url' => '/panel/admin/mensajes'],
+            'advertencias' => ['valor' => Mensaje::where('tipo', 'advertencia')->count(), 'url' => '/panel/admin/advertencias'],
+            'bloqueados' => ['valor' => User::where('bloqueado', true)->count(), 'url' => '/panel/admin/usuarios?filtro=bloqueados'],
+        ];
+
+        $porCategoria = Profesional::with('categoria')
+            ->get()
+            ->groupBy(fn ($p) => $p->categoria->nombre_categoria ?? 'Sin categoría')
+            ->map->count()
+            ->sortDesc();
+
+        $porZona = Profesional::whereNotNull('zona')
+            ->selectRaw('zona, count(*) as total')
+            ->groupBy('zona')
+            ->pluck('total', 'zona')
+            ->sortDesc();
+
+        $maxCategoria = $porCategoria->max() ?: 1;
+        $maxZona = $porZona->max() ?: 1;
+
+        $pagos = [
+            'pagados' => ServicioAdquirido::where('estado_pago', 'pagado')->count(),
+            'pendientes' => ServicioAdquirido::where('estado_pago', 'pendiente')->where('verificado', true)->count(),
+            'total_monto' => ServicioAdquirido::where('estado_pago', 'pagado')->sum('monto_pagado'),
+        ];
+
+        $topProfesionales = Profesional::with('categoria')
+            ->withCount('resenas')
+            ->orderByDesc('calificacion')
+            ->take(10)
+            ->get();
+
+        return view('panel.admin.reportes', compact(
+            'resumen', 'porCategoria', 'porZona', 'maxCategoria', 'maxZona', 'pagos', 'topProfesionales'
+        ));
+    }
+
+    public function showCliente(int $id)
+    {
+        $cliente = User::where('tipo_usuario', 'cliente')
+            ->with([
+                'serviciosAdquiridos.profesional.categoria',
+                'advertenciasRecibidas' => fn ($q) => $q->with('remitente')->latest(),
+                'resenas.profesional',
+            ])
+            ->findOrFail($id);
+
+        return view('panel.admin.cliente-show', compact('cliente'));
+    }
+
+    public function advertencias()
+    {
+        $advertencias = Mensaje::with(['remitente', 'destinatario.profesional', 'profesional'])
+            ->where('tipo', 'advertencia')
+            ->latest()
+            ->get();
+
+        return view('panel.admin.advertencias', compact('advertencias'));
+    }
+
+    public function pagos()
+    {
+        $pagos = ServicioAdquirido::with(['cliente', 'profesional.categoria'])
+            ->where('estado_solicitud', 'aceptada')
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return view('panel.admin.pagos', compact('pagos'));
+    }
+
+    public function toggleBloqueo(int $id)
+    {
+        $usuario = User::findOrFail($id);
+
+        if ($usuario->isAdmin()) {
+            return back()->withErrors(['error' => 'No se puede bloquear al administrador.']);
+        }
+
+        $usuario->update(['bloqueado' => ! $usuario->bloqueado]);
+
+        $estado = $usuario->bloqueado ? 'bloqueado' : 'desbloqueado';
+
+        return back()->with('success', "Usuario {$estado} correctamente.");
     }
 
     public function contactos()
@@ -112,6 +236,12 @@ class AdminPanelController extends Controller
             'cuerpo' => $request->cuerpo,
             'tipo' => 'advertencia',
         ]);
+
+        NotificacionService::enviar(
+            $destinatario,
+            'Advertencia de SFM: '.$request->asunto,
+            $request->cuerpo
+        );
 
         return back()->with('success', 'Advertencia enviada correctamente.');
     }

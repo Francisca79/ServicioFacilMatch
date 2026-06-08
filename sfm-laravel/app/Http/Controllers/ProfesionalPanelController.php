@@ -10,7 +10,9 @@ use App\Models\Mensaje;
 use App\Models\Profesional;
 use App\Models\Resena;
 use App\Models\ResenaCliente;
+use App\Models\ServicioAdquirido;
 use App\Models\User;
+use App\Services\NotificacionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -34,7 +36,21 @@ class ProfesionalPanelController extends Controller
         $contactosPendientes = $profesional->contactos()->latest()->take(5)->get();
         $mensajesNoLeidos = Mensaje::where('destinatario_id', $user->id)->where('leido', false)->count();
 
-        return view('panel.profesional.index', compact('profesional', 'resenas', 'contactosPendientes', 'mensajesNoLeidos'));
+        $ingresos = ServicioAdquirido::where('profesional_id', $profesional->id)
+            ->where('estado_pago', 'pagado')
+            ->where('profesional_confirmo_cobro', true)
+            ->orderByDesc('fecha_cobro')
+            ->get();
+
+        $totalIngresos = $ingresos->sum('monto_pagado');
+        $ingresosPorMes = $ingresos->groupBy(fn ($s) => $s->fecha_cobro?->format('Y-m') ?? 'Sin fecha')
+            ->map(fn ($items) => $items->sum('monto_pagado'))
+            ->sortKeys();
+
+        return view('panel.profesional.index', compact(
+            'profesional', 'resenas', 'contactosPendientes', 'mensajesNoLeidos',
+            'ingresos', 'totalIngresos', 'ingresosPorMes'
+        ));
     }
 
     public function directorio(Request $request)
@@ -102,12 +118,39 @@ class ProfesionalPanelController extends Controller
 
         $destinatarios = User::where('tipo_usuario', 'cliente')->orderBy('name')->get();
 
-        return view('panel.profesional.mensajes', compact('mensajes', 'destinatarios', 'mensajesNoLeidos'));
+        $conversaciones = Mensaje::agruparConversaciones($mensajes, $user->id);
+        $profesional = $user->profesional;
+
+        $serviciosPorConversacion = collect();
+        if ($profesional) {
+            foreach ($conversaciones as $conv) {
+                $serviciosPorConversacion[$conv['clave']] = ServicioAdquirido::paraConversacion(
+                    $conv['otro']->id,
+                    $profesional->id
+                );
+            }
+        }
+
+        return view('panel.profesional.mensajes', compact(
+            'conversaciones', 'destinatarios', 'mensajesNoLeidos', 'serviciosPorConversacion'
+        ));
     }
 
     public function storeMensaje(StoreMensajeRequest $request)
     {
         $profesional = auth()->user()->profesional;
+
+        if ($profesional && $request->destinatario_id) {
+            $servicio = ServicioAdquirido::paraConversacion($request->destinatario_id, $profesional->id);
+
+            if (! $servicio || ! $servicio->permiteChat()) {
+                $motivo = $servicio?->estado_solicitud === 'pendiente'
+                    ? 'Debes aceptar o rechazar la solicitud antes de chatear con el cliente.'
+                    : 'El cliente debe enviar una nueva solicitud de servicio para retomar la conversación.';
+
+                return back()->withErrors(['cuerpo' => $motivo]);
+            }
+        }
 
         Mensaje::create([
             'remitente_id' => auth()->id(),
@@ -117,6 +160,14 @@ class ProfesionalPanelController extends Controller
             'cuerpo' => $request->cuerpo,
             'tipo' => 'normal',
         ]);
+
+        if ($destinatario = User::find($request->destinatario_id)) {
+            NotificacionService::enviar(
+                $destinatario,
+                'Nuevo mensaje en SFM',
+                'De: '.auth()->user()->name."\n\n".$request->cuerpo
+            );
+        }
 
         return back()->with('success', 'Mensaje enviado.');
     }
@@ -130,9 +181,85 @@ class ProfesionalPanelController extends Controller
             abort(403, 'No puedes eliminar este mensaje.');
         }
 
+        if ($mensaje->tipo === 'advertencia') {
+            return back()->withErrors(['error' => 'No puedes eliminar advertencias del administrador.']);
+        }
+
         $mensaje->delete();
 
         return back()->with('success', 'Mensaje eliminado.');
+    }
+
+    public function responderSolicitud(Request $request)
+    {
+        $request->validate([
+            'servicio_id' => 'required|exists:servicios_adquiridos,id',
+            'accion' => 'required|in:aceptar,rechazar',
+            'mensaje' => 'required|string|min:10|max:1000',
+        ]);
+
+        $profesional = auth()->user()->profesional;
+        $servicio = ServicioAdquirido::where('profesional_id', $profesional->id)
+            ->where('estado_solicitud', 'pendiente')
+            ->findOrFail($request->servicio_id);
+
+        $aceptada = $request->accion === 'aceptar';
+        $asunto = $aceptada ? 'Tu solicitud fue aceptada' : 'Tu solicitud fue rechazada';
+
+        $servicio->update([
+            'estado_solicitud' => $aceptada ? 'aceptada' : 'denegada',
+            'verificado' => $aceptada,
+            'verificado_por' => $aceptada ? auth()->id() : null,
+            'notas' => $aceptada ? 'Aceptada por el profesional' : 'Rechazada por el profesional',
+        ]);
+
+        Mensaje::create([
+            'remitente_id' => auth()->id(),
+            'destinatario_id' => $servicio->user_id,
+            'profesional_id' => $profesional->id,
+            'asunto' => $asunto,
+            'cuerpo' => $request->mensaje,
+            'tipo' => 'normal',
+        ]);
+
+        NotificacionService::enviar(
+            $servicio->cliente,
+            $asunto.' — SFM',
+            "{$profesional->nombre}: {$request->mensaje}"
+        );
+
+        return back()->with('success', $aceptada
+            ? 'Solicitud aceptada. Ya puedes continuar el chat con el cliente.'
+            : 'Solicitud rechazada. El cliente deberá enviar una nueva solicitud para contactarte.');
+    }
+
+    public function confirmarCobro(Request $request)
+    {
+        $request->validate([
+            'servicio_id' => 'required|exists:servicios_adquiridos,id',
+            'monto_pagado' => 'required|numeric|min:1',
+        ]);
+
+        $profesional = auth()->user()->profesional;
+        $servicio = ServicioAdquirido::where('profesional_id', $profesional->id)
+            ->where('estado_solicitud', 'aceptada')
+            ->findOrFail($request->servicio_id);
+
+        $servicio->update([
+            'monto_pagado' => $request->monto_pagado,
+            'estado_pago' => 'pagado',
+            'metodo_pago' => 'efectivo',
+            'profesional_confirmo_cobro' => true,
+            'fecha_cobro' => now(),
+        ]);
+
+        NotificacionService::enviar(
+            $servicio->cliente,
+            'Pago confirmado — SFM',
+            "El profesional confirmó el cobro de \${$request->monto_pagado} en efectivo."
+        );
+
+        return back()->with('success', 'Cobro en efectivo registrado correctamente.');
     }
 
     public function edit()

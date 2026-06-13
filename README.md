@@ -8,7 +8,7 @@ Código fuente de la aplicación: ServicioFacilMatch/sfm-laravel/
 Integrantes del grupo
 #	Nombre completo	Código de estudiante
 1	_Madeline Brunella Mejía Mejía	SMSS063924
-2	_ _	_ _
+2	_Freddy Samuel Vásquez Álvarez  SMSS056221
 3	_ _	_ _
 Gestor de base de datos
 El proyecto utiliza SQLite como motor de base de datos.

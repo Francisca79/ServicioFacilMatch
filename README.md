@@ -9,7 +9,7 @@ Integrantes del grupo
 #	Nombre completo	Código de estudiante
 1	_Madeline Brunella Mejía Mejía	SMSS063924
 2	_Freddy Samuel Vásquez Álvarez  SMSS056221
-3	_ _	_ _
+3	_Francisca Del Carmen Bonilla Argueta SMSS020724
 Gestor de base de datos
 El proyecto utiliza SQLite como motor de base de datos.
 
